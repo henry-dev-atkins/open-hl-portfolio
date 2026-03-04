@@ -1,0 +1,4 @@
+Account,Date,Type,Description,Amount,Currency
+HL SIPP,01/01/2026,Deposit,Bank transfer in,1000.00,GBP
+HL SIPP,02/01/2026,Buy,Fund purchase,-200.00,GBP
+HL SIPP,03/01/2026,Dividend,Distribution paid,5.00,GBP

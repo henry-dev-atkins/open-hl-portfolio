@@ -1,0 +1,17 @@
+overrides:
+  # Optional manual mapping records.
+  # Fields:
+  # - asset_name_pattern: case-insensitive regex matched against canonical asset name
+  # - isin: exact ISIN match (preferred when available)
+  # - sedol: exact SEDOL match (preferred when available)
+  # - yf_ticker: Yahoo Finance ticker
+  # - currency: optional ticker currency hint (e.g. GBP, USD)
+  # - hl_security_url: optional direct HL instrument URL
+  # - notes: optional operator notes
+  #
+  # Example:
+  # - asset_name_pattern: "^vanguard s&p 500 ucits etf$"
+  #   yf_ticker: "VUSA.L"
+  #   currency: "GBP"
+  #   hl_security_url: "https://www.hl.co.uk/shares/shares-search-results/v/vanguard-s-and-p-500-ucits-etf"
+  #   notes: "Validated manually against HL and Yahoo quote pages"

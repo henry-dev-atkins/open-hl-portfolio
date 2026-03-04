@@ -1,0 +1,42 @@
+accounts:
+  - account_id: SIPP
+    account_name: HL SIPP
+    account_type: pension
+    tax_wrapper: sipp
+    name_patterns:
+      - sipp
+      - pension
+
+  - account_id: LISA
+    account_name: HL Lifetime ISA
+    account_type: brokerage
+    tax_wrapper: lisa
+    name_patterns:
+      - lifetime isa
+      - hl lisa
+
+  - account_id: JISA
+    account_name: HL Junior Stocks and Shares ISA
+    account_type: brokerage
+    tax_wrapper: jisa
+    name_patterns:
+      - junior stocks & shares isa
+      - junior stocks and shares isa
+      - junior isa
+
+  - account_id: ISA
+    account_name: HL Stocks and Shares ISA
+    account_type: brokerage
+    tax_wrapper: isa
+    name_patterns:
+      - stocks and shares isa
+      - stocks & shares isa
+      - hl stocks and shares isa
+
+  - account_id: GIA
+    account_name: HL Fund and Share Account
+    account_type: brokerage
+    tax_wrapper: taxable
+    name_patterns:
+      - fund and share account
+      - gia

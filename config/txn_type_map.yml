@@ -1,0 +1,69 @@
+default:
+  txn_type: other
+  flow_class: other
+
+rules:
+  - txn_type: deposit
+    flow_class: external_in
+    match_any:
+      - deposit
+      - bank transfer in
+      - contribution
+      - payment received
+      - money in
+
+  - txn_type: withdrawal
+    flow_class: external_out
+    match_any:
+      - withdrawal
+      - bank transfer out
+      - payment sent
+      - money out
+
+  - txn_type: transfer_in
+    flow_class: internal_in
+    match_any:
+      - transfer in
+      - internal transfer in
+
+  - txn_type: transfer_out
+    flow_class: internal_out
+    match_any:
+      - transfer out
+      - internal transfer out
+
+  - txn_type: interest
+    flow_class: cash_interest
+    match_any:
+      - cash interest
+      - interest paid
+
+  - txn_type: dividend
+    flow_class: dividend
+    match_any:
+      - dividend
+      - distribution
+
+  - txn_type: fee
+    flow_class: fee
+    match_any:
+      - fee
+      - charge
+      - commission
+      - stamp duty
+      - levy
+
+  - txn_type: tax
+    flow_class: tax
+    match_any:
+      - tax
+      - withholding
+      - capital gains
+
+  - txn_type: trade
+    flow_class: trade_cash
+    match_any:
+      - buy
+      - sell
+      - deal
+      - trade

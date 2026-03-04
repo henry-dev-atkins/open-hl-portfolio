@@ -1,0 +1,28 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Local environments and packaging artifacts
+.venv/
+*.egg-info/
+build/
+dist/
+
+# Local data and generated outputs
+data/raw/
+data/staging/
+data/marts/
+data/_review_tmp/
+data/_phase1_test_tmp/
+data/pytest_tmp/
+*.duckdb
+
+# Streamlit and local env files
+.streamlit/
+.env
+AI_Guide.md
+.coverage
+.coverage.*
+htmlcov/

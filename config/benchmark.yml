@@ -1,0 +1,4 @@
+provider: yfinance
+ticker: "^FTSE"
+start_date: null
+end_date: null

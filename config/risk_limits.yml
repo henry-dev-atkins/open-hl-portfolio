@@ -1,0 +1,15 @@
+max_single_weight:
+  warning: 0.20
+  critical: 0.30
+
+top5_weight:
+  warning: 0.60
+  critical: 0.75
+
+top10_weight:
+  warning: 0.80
+  critical: 0.90
+
+hhi:
+  warning: 0.12
+  critical: 0.18

@@ -1,0 +1,4 @@
+coverage_min_weight: 0.7
+
+# Optional fixed policy weights. If omitted, equal weights across active accounts are used.
+account_policy_weights: {}

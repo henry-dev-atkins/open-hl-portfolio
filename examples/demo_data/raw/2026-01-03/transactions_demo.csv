@@ -1,0 +1,6 @@
+Account,Date,Type,Description,Amount,Currency
+HL SIPP,01/01/2026,Deposit,Bank transfer in,5000.00,GBP
+HL SIPP,02/01/2026,Buy,Demo Global Equity Fund purchase,-2000.00,GBP
+HL SIPP,03/01/2026,Dividend,Demo Global Equity Fund distribution,25.00,GBP
+HL Stocks and Shares ISA,01/01/2026,Deposit,Debit card deposit,3000.00,GBP
+HL Stocks and Shares ISA,03/01/2026,Buy,Demo UK Index Fund purchase,-1500.00,GBP
