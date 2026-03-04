@@ -1,8 +1,12 @@
 # HL Portfolio Analytics
 
+Hargreaves Lansdown has a *terrible* portfolio analysis tool with no tracking of deposits vs performance, no correlation or optimisation methods and no cost-performance breakdown. 
+I built this tool to analyse my account and hopefully some other people may find this useful as well. 
+
 Flow-corrected account and portfolio analytics for Hargreaves Lansdown exports.
 
 # Security Note. 
+*I take no responsibility for anything - use at your own risk.* That said, I personally use this.
 Never share private information, especially in version controlled environments like GitHub. 
 Therefore, this tool will never store, save, cache or otherwise interact with your login/account details.
 
@@ -13,6 +17,12 @@ It does:
 - Saves them to your computer,
 - Analyses them and displays the result,
 - Stores the investment reports in your `Downloads/...` folder.
+
+It has significant risks from (These are Issues I am working on):
+- SQL injection (fixing is a To Do),
+- Dependency vulnerabilities (partially mitigated by pinned versions in the `uv`/toml file),
+- Playwright installation security (To Do),
+- Accidental exposure of generated artefacts (see the `.gitignore` and `docs/privacy_and_redaction.md`).
 
 ## Capabilities
 
