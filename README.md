@@ -2,15 +2,27 @@
 
 Flow-corrected account and portfolio analytics for Hargreaves Lansdown exports.
 
-## What This Does
+# Security Note. 
+Never share private information, especially in version controlled environments like GitHub. 
+Therefore, this tool will never store, save, cache or otherwise interact with your login/account details.
 
-- Imports HL transaction and valuation export files from `data/raw/<run-date>/`
-- Builds normalized staging tables in DuckDB
-- Calculates deposit-corrected daily P/L and return by account
-- Aggregates portfolio-level daily performance
-- Reconstructs daily per-asset values from holdings/report checkpoints
-- Builds attribution, concentration, and cost-drag marts
+It does:
+- Allows *you* to login to the site independent to the tool,
+  - Once you are logged in the tool gets to work.
+- Gathers your account's investment reports,
+- Saves them to your computer,
+- Analyses them and displays the result,
+- Stores the investment reports in your `Downloads/...` folder.
+
+## Capabilities
+
+- Gather your investment report csv's from the website,
+- Parse them into a functioning table,
+- Query yahoo-finance for daily valuations with intelligent name searching,
+- Human edits of the yahoo-finance/HL ticker mapping,
+- Builds normalized staging tables in a database,
 - Serves a Streamlit dashboard for interactive review
+
 
 ## Safe Demo Run
 
