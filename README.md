@@ -1,334 +1,375 @@
 # HL Portfolio Analytics
 
-Hargreaves Lansdown has a *terrible* portfolio analysis tool with no tracking of deposits vs performance, no correlation or optimisation methods and no cost-performance breakdown. 
-I built this tool to analyse my account and hopefully some other people may find this useful as well. 
+Flow-corrected account, asset, attribution, concentration, and cost-drag analytics for Hargreaves Lansdown portfolio exports.
 
-Flow-corrected account and portfolio analytics for Hargreaves Lansdown exports.
+This project turns HL CSV exports or Investment Report PDFs into normalized DuckDB tables and a Streamlit dashboard. It is designed for local use with your own financial records; credentials are never stored by the project.
 
-# Security Note. 
-*I take no responsibility for anything - use at your own risk.* That said, I personally use this.
-Never share private information, especially in version controlled environments like GitHub. 
-Therefore, this tool will never store, save, cache or otherwise interact with your login/account details.
+## Security And Privacy
 
-It does:
-- Allows *you* to login to the site independent to the tool,
-  - Once you are logged in the tool gets to work.
-- Gathers your account's investment reports,
-- Saves them to your computer,
-- Analyses them and displays the result,
-- Stores the investment reports in your `Downloads/...` folder.
+Use this at your own risk. Real HL exports, investment report PDFs, generated DuckDB files, screenshots, and browser debug files can contain sensitive financial information.
 
-It has significant risks from (These are Issues I am working on):
-- SQL injection (fixing is a To Do),
-- Dependency vulnerabilities (partially mitigated by pinned versions in the `uv`/toml file),
-- Playwright installation security (To Do),
-- Accidental exposure of generated artefacts (see the `.gitignore` and `docs/privacy_and_redaction.md`).
+- Do not commit anything from `data/raw/`, `data/staging/`, or `data/marts/`.
+- Do not share screenshots or files containing account numbers, balances, holdings, addresses, or transaction history.
+- Prefer the sanitized demo dataset in `examples/demo_data/` for examples, bug reports, and screenshots.
+- If you need to share real data privately, redact it first and verify the redacted file still reproduces the issue.
+
+See `docs/privacy_and_redaction.md` for a short redaction checklist.
 
 ## Capabilities
 
-- Gather your investment report csv's from the website,
-- Parse them into a functioning table,
-- Query yahoo-finance for daily valuations with intelligent name searching,
-- Human edits of the yahoo-finance/HL ticker mapping,
-- Builds normalized staging tables in a database,
-- Serves a Streamlit dashboard for interactive review
+- Parses HL transaction and valuation CSV exports.
+- Parses HL Investment Report PDFs into account, capital transaction, and asset valuation datasets.
+- Builds normalized staging tables and analysis marts in DuckDB.
+- Separates external cashflows from investment performance.
+- Resolves asset names to Yahoo Finance tickers with optional manual overrides.
+- Fetches market prices for asset-level analytics and benchmark context.
+- Serves an interactive Streamlit dashboard.
 
+## Quick Start: UV Setup
+
+Install `uv`, then sync the project environment from `pyproject.toml` and `uv.lock`:
+
+```bash
+uv sync --extra dev
+```
+
+Install the Chromium browser used by Playwright fetch flows:
+
+```bash
+uv run python -m playwright install chromium
+```
+
+Playwright is only needed for browser-based HL fetching. Local demo runs, manual CSV imports, PDF parsing, tests, and the dashboard use the Python environment created by `uv sync`.
+
+Optional environment defaults can be stored in `.env`:
+
+```bash
+cp .env.example .env
+```
+
+On Windows PowerShell, use this equivalent copy command:
+
+```powershell
+Copy-Item .env.example .env
+```
 
 ## Safe Demo Run
 
-The fastest way to evaluate the repo without using personal account data is to run the
-sanitized demo dataset in [`examples/demo_data/`](examples/demo_data/README.md):
+The fastest way to evaluate the project without personal data is the sanitized demo dataset in `examples/demo_data/`.
+
+Run the demo import:
+
+```bash
+uv run python -m src.ingest.run_import --input-dir examples/demo_data/raw/2026-01-03 --db-path data/marts/hl_portfolio_demo.duckdb --run-id DEMO_RUN_2026_01_03 --notes "Sanitized demo dataset"
+```
+
+Build marts:
+
+```bash
+uv run python -m src.marts.build_marts --db-path data/marts/hl_portfolio_demo.duckdb --run-id DEMO_RUN_2026_01_03
+```
+
+Write a quality report:
+
+```bash
+uv run python -m src.quality.reconciliation --db-path data/marts/hl_portfolio_demo.duckdb --run-id DEMO_RUN_2026_01_03 --output-json data/marts/quality_report_DEMO_RUN_2026_01_03.json
+```
+
+Launch the dashboard against the demo database:
+
+```bash
+HL_DB_PATH=data/marts/hl_portfolio_demo.duckdb uv run streamlit run src/presentation/app.py
+```
+
+On Windows PowerShell:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_demo.ps1
 $env:HL_DB_PATH = "data/marts/hl_portfolio_demo.duckdb"
-streamlit run src/presentation/app.py
+uv run streamlit run src/presentation/app.py
 ```
 
-Outputs:
+Demo outputs:
 
-- Demo DB: `data/marts/hl_portfolio_demo.duckdb`
-- Demo quality report: `data/marts/quality_report_DEMO_RUN_2026_01_03.json`
+- `data/marts/hl_portfolio_demo.duckdb`
+- `data/marts/quality_report_DEMO_RUN_2026_01_03.json`
 
-The demo files are synthetic and safe to inspect, modify, and share.
+## End-To-End Investment Report Run
 
-## Quick Start With Your Own Data
+For normal personal use, run the full PDF-based workflow with one command:
 
-This repo is PowerShell-first for the scripted workflows below. The core Python package
-and tests do not require HL credentials.
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -e .[dev]
-python -m playwright install chromium
+```bash
+uv run python -m src.pipeline.run_end_to_end --run-date 2026-02-13
 ```
 
-Place HL exports into `data/raw/YYYY-MM-DD/` and run:
+This runs:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_all.ps1 -RunDate 2026-02-13
+1. Download Investment Report PDFs after manual HL login.
+2. Parse reports into staging CSVs.
+3. Resolve report assets to Yahoo Finance tickers.
+4. Fetch daily yfinance prices for resolved tickers.
+5. Build account, portfolio, asset, attribution, concentration, and cost-drag marts.
+6. Write a quality report.
+7. Launch the Streamlit dashboard against the generated DuckDB file.
+
+The runner reuses cached artifacts for the same `--run-date` where possible:
+
+- Existing PDFs plus manifest skip the download step.
+- Existing staging CSVs skip parsing.
+- Existing ticker mappings skip ticker resolution.
+- Existing price rows skip price fetching.
+- Marts and the quality report are rebuilt every run so outputs reflect current config and cached data.
+
+Useful options:
+
+```bash
+uv run python -m src.pipeline.run_end_to_end --run-date 2026-02-13 --skip-app
+uv run python -m src.pipeline.run_end_to_end --run-date 2026-02-13 --force-download
+uv run python -m src.pipeline.run_end_to_end --run-date 2026-02-13 --force-parse --force-tickers --force-prices
+uv run python -m src.pipeline.run_end_to_end --run-date 2026-02-13 --disable-auto-search
+uv run python -m src.pipeline.run_end_to_end --run-date 2026-02-13 --disable-price-gap-fill
 ```
 
-Optional (for full asset-level analytics on CSV runs): include one or more
-holdings snapshot files matching `holdings_snapshot*.csv` in `data/raw/YYYY-MM-DD/`.
+By default, the runner uses `data/marts/hl_portfolio.duckdb`. Override it with:
 
-Launch dashboard:
-
-```powershell
-streamlit run src/presentation/app.py
+```bash
+uv run python -m src.pipeline.run_end_to_end \
+  --run-date 2026-02-13 \
+  --db-path data/marts/my_portfolio.duckdb
 ```
 
-If you want the dashboard to point at a non-default database, set `HL_DB_PATH` first:
+## Run With Your Own CSV Exports
 
-```powershell
-$env:HL_DB_PATH = "data/marts/hl_portfolio.duckdb"
-streamlit run src/presentation/app.py
+Place HL CSV exports into a dated raw-data folder:
+
+```text
+data/raw/<YYYY-MM-DD>/
 ```
 
-## Automated Site Fetch (No Credential Storage)
+Example:
 
-If you do not want to manually download CSV files, use the fetcher:
+```text
+data/raw/2026-02-13/
+```
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\fetch_hl_exports.ps1 -RunDate 2026-02-13
+Transaction exports, valuation exports, and holdings snapshots can be mixed in the same folder. File type is inferred from filename and CSV structure.
+
+Import the raw files:
+
+```bash
+uv run python -m src.ingest.run_import --input-dir data/raw/2026-02-13 --db-path data/marts/hl_portfolio.duckdb --run-id CSV_2026_02_13
+```
+
+Build marts:
+
+```bash
+uv run python -m src.marts.build_marts --db-path data/marts/hl_portfolio.duckdb --run-id CSV_2026_02_13
+```
+
+Write a quality report:
+
+```bash
+uv run python -m src.quality.reconciliation --db-path data/marts/hl_portfolio.duckdb --run-id CSV_2026_02_13 --output-json data/marts/quality_report_CSV_2026_02_13.json
+```
+
+Optional, for fuller asset-level analytics on CSV runs: include one or more holdings snapshot files matching `holdings_snapshot*.csv` in the same raw-data folder.
+
+## Advanced: Run Investment Report Stages Manually
+
+HL portfolio history may expose account history as Investment Report PDFs. This flow can download reports after manual login, parse them into structured staging CSVs, and build the report-based marts.
+
+Download reports after manual HL login:
+
+```bash
+uv run python -m src.fetch.hl_investment_reports_fetch --run-date 2026-08-19
 ```
 
 What happens:
 
-1. A browser opens on HL login.
-2. You type credentials and MFA manually.
-3. Return to terminal and press Enter.
-4. Script crawls likely account/history pages and clicks download/export controls.
-5. CSVs are saved into `data/raw/<RunDate>/`.
-6. Pipeline runs automatically (unless `-RunPipeline:$false`).
+1. A browser opens.
+2. You log in to HL manually, including MFA.
+3. The script continues after it detects the authenticated account area.
+4. Investment Report PDFs are downloaded to `data/raw/2026-02-13/investment_reports/`.
+5. A manifest is written to `data/raw/2026-02-13/investment_reports_manifest.json`.
 
-Manifest output:
+Parse already-downloaded PDFs:
 
-- `data/raw/<RunDate>/download_manifest.json`
-
-## HL Investment Reports Flow (PDF-Based)
-
-HL portfolio history may expose report links as PDFs rather than clean CSV endpoints.
-Use this flow to download all `Investment Report` PDFs and parse them into a structured CSV:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\fetch_investment_reports.ps1 -RunDate 2026-02-13
+```bash
+uv run python -m src.ingest.hl_investment_report_pdf_parser --run-date 2026-02-13 --text-dir data/staging/investment_report_text/2026-02-13
 ```
 
-Script options:
+Build report marts:
 
-- `-FetchReports true|false` (set `false` to skip login/download and reuse existing PDFs)
-- `-ParseReports true|false`
-- `-BuildMarts true|false`
-- `-DbPath <duckdb path>`
-
-Parse/build from already-downloaded PDFs only:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\fetch_investment_reports.ps1 -RunDate 2026-02-13 -FetchReports false -ParseReports true -BuildMarts true
+```bash
+uv run python -m src.marts.build_report_marts --run-date 2026-02-13 --db-path data/marts/hl_portfolio.duckdb
 ```
 
-Outputs:
+Report-flow outputs:
 
-- PDFs: `data/raw/<RunDate>/investment_reports/`
-- Fetch manifest: `data/raw/<RunDate>/investment_reports_manifest.json`
-- Parsed metrics CSV: `data/staging/investment_reports_extracted_<RunDate>.csv`
-- Parsed overview checkpoints CSV: `data/staging/investment_reports_overview_<RunDate>.csv`
-- Parsed capital transactions CSV: `data/staging/investment_reports_capital_txns_<RunDate>.csv`
-- Parsed asset valuation checkpoints CSV: `data/staging/investment_reports_asset_values_<RunDate>.csv`
-- Unresolved ticker queue CSV: `data/staging/unresolved_assets_<RunDate>.csv`
-- Unresolved candidate ticker CSV: `data/staging/unresolved_ticker_candidates_<RunDate>.csv`
-- Optional extracted text: `data/staging/investment_report_text/<RunDate>/`
-- Mart refresh from report datasets:
-  - `mart_account_daily`
-  - `mart_portfolio_daily`
-  - `mart_asset_daily`
-  - `mart_attribution_daily`
-  - `mart_concentration_daily`
-  - `mart_cost_drag_account_daily`
-  - `mart_cost_drag_portfolio_daily`
-  - By default, `src.marts.build_report_marts` uses yfinance price shape to gap-fill daily
-    valuations between report checkpoints (disable with `--disable-price-gap-fill`).
+- `data/raw/<RunDate>/investment_reports/`
+- `data/raw/<RunDate>/investment_reports_manifest.json`
+- `data/staging/investment_reports_extracted_<RunDate>.csv`
+- `data/staging/investment_reports_overview_<RunDate>.csv`
+- `data/staging/investment_reports_capital_txns_<RunDate>.csv`
+- `data/staging/investment_reports_asset_values_<RunDate>.csv`
+- `data/staging/investment_report_text/<RunDate>/`
+- `data/marts/hl_portfolio.duckdb`
 
-## Notes
+## Automated CSV Fetch
 
-- Credentials are never captured or stored by this project.
-- Manual login/export workflow is assumed.
-- Transaction type mappings are configurable in `config/txn_type_map.yml`.
+If you prefer not to manually download CSV exports, the site fetcher opens HL for manual login and then attempts to collect export/download links.
 
-## Privacy And Redaction
-
-Treat HL exports, investment reports, screenshots, and generated DuckDB files as personal
-financial records.
-
-- Do not commit anything from `data/raw/`, `data/staging/`, or `data/marts/`.
-- Do not post screenshots, PDFs, or issue attachments containing account numbers, balances,
-  transaction history, or broker-specific identifiers.
-- Prefer the sanitized demo dataset in `examples/demo_data/` for bug reports,
-  reproductions, and documentation examples.
-- If you must share a real export privately, remove names, account numbers, balances,
-  addresses, and any row that is not required to reproduce the bug first.
-
-See [`docs/privacy_and_redaction.md`](docs/privacy_and_redaction.md) for a short checklist.
-
-## YFinance Ticker Resolution and Price Fetch
-
-Resolve report asset names to Yahoo tickers (with HL/Yahoo validation links):
-
-```powershell
-python -m src.prices.resolve_asset_tickers --run-date 2026-02-13 --db-path data/marts/hl_portfolio.duckdb
+```bash
+uv run python -m src.fetch.hl_site_fetch --run-date 2026-02-13 --start-url https://online.hl.co.uk/my-accounts/login --max-pages 30 --run-pipeline --db-path data/marts/hl_portfolio.duckdb
 ```
 
-Fetch daily Yahoo prices for resolved tickers:
+Downloaded CSVs are saved under `data/raw/<RunDate>/`, with a manifest at `data/raw/<RunDate>/download_manifest.json`.
 
-```powershell
-python -m src.prices.fetch_yfinance_prices --db-path data/marts/hl_portfolio.duckdb
+## Ticker Resolution And Price Fetch
+
+For asset-level report analytics, resolve parsed asset names to Yahoo Finance tickers:
+
+```bash
+uv run python -m src.prices.resolve_asset_tickers --run-date 2026-02-13 --db-path data/marts/hl_portfolio.duckdb
 ```
 
-When `--start-date` is omitted, the fetch step now auto-backfills each ticker from the
-earliest mapped asset checkpoint date in `dim_asset.first_seen_date`.
+Then fetch daily prices:
 
-Or run both steps with one script:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\fetch_prices.ps1 -RunDate 2026-02-13
+```bash
+uv run python -m src.prices.fetch_yfinance_prices --db-path data/marts/hl_portfolio.duckdb
 ```
 
-Recommended report valuation sequence:
+When `--start-date` is omitted, the price fetcher backfills each ticker from the earliest mapped asset checkpoint date in `dim_asset.first_seen_date`.
 
-1. Parse investment reports to generate overview/capital/asset CSVs.
-2. Resolve asset tickers.
-3. Fetch yfinance prices.
-4. Build report marts (gap-fill enabled by default):
+Rebuild report marts after fetching prices so price-shaped gap fill can run:
 
-```powershell
-python -m src.marts.build_report_marts --run-date 2026-02-13 --db-path data/marts/hl_portfolio.duckdb
+```bash
+uv run python -m src.marts.build_report_marts --run-date 2026-02-13 --db-path data/marts/hl_portfolio.duckdb
 ```
 
-Manual override config (optional):
+Disable price gap fill if you only want report checkpoints:
 
-- `config/asset_ticker_overrides.yml`
-
-Link fields stored in mapping dataset:
-
-- `yf_quote_url`
-- `yf_history_url`
-- `hl_security_url` (when known)
-- `hl_search_url` (always populated fallback)
-
-## Data Contract
-
-### Input (Raw)
-
-- `data/raw/<YYYY-MM-DD>/*.csv`
-- Transaction exports and valuation exports can be mixed in one run directory.
-- File type is inferred by filename and CSV structure.
-
-### Holdings Snapshot Contract (CSV Mode Asset Rebuild)
-
-Path pattern:
-
-- `data/raw/<YYYY-MM-DD>/holdings_snapshot*.csv`
-
-Required columns:
-
-- `account_name`
-- `as_of_date`
-- `asset_name`
-- `market_value_gbp`
-
-Optional columns:
-
-- `account_id`
-- `isin`
-- `sedol`
-- `units`
-- `currency`
-- `source_file`
-
-### Staging (DuckDB)
-
-- `stg_transactions`: classified transaction events and signed amounts
-- `stg_account_value_daily`: daily account close values
-- `stg_account_flow_daily`: aggregated external/internal daily flows
-- `stg_asset_checkpoint`: per-account asset valuation checkpoints
-- `stg_account_cost_daily`: daily fee/tax/interest components
-- `stg_account_cash_daily`: daily cash balances (observed or proxy)
-
-### Marts (DuckDB)
-
-- `mart_account_daily`: account-level daily corrected P/L and return
-- `mart_portfolio_daily`: portfolio-level daily corrected P/L and return
-- `mart_asset_daily`: reconstructed daily asset values, returns, and weights
-- `mart_attribution_daily`: daily allocation/selection/interaction decomposition
-- `mart_concentration_daily`: concentration metrics and breach flags
-- `mart_cost_drag_account_daily`: account-level fee/tax/idle-cash drag
-- `mart_cost_drag_portfolio_daily`: portfolio-level fee/tax/idle-cash drag
-
-## Metric Definitions
-
-- Daily corrected P/L:
-  - `daily_pnl = V_t - V_(t-1) - external_flow_t`
-- Daily corrected return (Modified Dietz daily approximation):
-  - `daily_return = daily_pnl / (V_(t-1) + 0.5 * external_flow_t)`
-- Cumulative return:
-  - chain-linked `product(1 + daily_return) - 1`
-- Net deposited cash:
-  - cumulative sum of external inflows minus external outflows
-
-## One-Command Pipeline
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run_all.ps1 -RunDate 2026-02-13
+```bash
+uv run python -m src.marts.build_report_marts --run-date 2026-02-13 --db-path data/marts/hl_portfolio.duckdb --disable-price-gap-fill
 ```
 
-Options:
-
-- `-RunDate`: folder under `data/raw/`
-- `-RunId`: explicit run identifier (optional)
-- `-DbPath`: DuckDB file path (optional)
-- `-Notes`: import note stored in `raw_import_runs` (optional)
+Optional manual mappings live in `config/asset_ticker_overrides.yml`.
 
 ## Dashboard
 
-```powershell
-streamlit run src/presentation/app.py
+Launch the dashboard:
+
+```bash
+uv run streamlit run src/presentation/app.py
 ```
 
-Pages:
+By default, the app reads `data/marts/hl_portfolio.duckdb`. To point it at another database, set `HL_DB_PATH` before launching.
 
-- `Overview`: portfolio value vs deposits and corrected P/L
-- `Accounts`: account-specific drilldown
-- `Cashflows`: external/internal flows
-- `Performance`: cumulative TWR, daily return, drawdown
-- `Assets`: per-asset report checkpoints and single-asset performance over time
-- `Attribution`: allocation vs selection decomposition and account contribution drilldown
-- `Rolling & Concentration`: rolling 6M/1Y returns, worst trailing windows, drawdown recovery, concentration risk
-- `Cost Drag`: fee/tax/idle-cash drag decomposition with cash source quality
+Linux/macOS:
 
-## Advanced Analytics Config
+```bash
+HL_DB_PATH=data/marts/hl_portfolio_demo.duckdb uv run streamlit run src/presentation/app.py
+```
 
-- `config/benchmark.yml`: benchmark ticker/provider for contextual benchmark returns
-- `config/attribution_policy.yml`: optional account policy weights and coverage threshold
-- `config/risk_limits.yml`: concentration warning/critical thresholds
-- `config/cost_drag.yml`: idle-cash benchmark annual rate and compounding frequency
+Windows PowerShell:
+
+```powershell
+$env:HL_DB_PATH = "data/marts/hl_portfolio_demo.duckdb"
+uv run streamlit run src/presentation/app.py
+```
+
+Dashboard pages:
+
+- `Overview`: portfolio value vs deposits and corrected P/L.
+- `Accounts`: account-specific drilldown.
+- `Cashflows`: external and internal flows.
+- `Performance`: cumulative TWR, daily return, and drawdown.
+- `Assets`: per-asset report checkpoints and single-asset performance.
+- `Attribution`: allocation, selection, interaction, and account contribution.
+- `Rolling & Concentration`: rolling returns, trailing windows, drawdown recovery, and concentration risk.
+- `Cost Drag`: fee, tax, and idle-cash drag.
+
+## Data Contract
+
+Raw CSV input:
+
+- Path pattern: `data/raw/<YYYY-MM-DD>/*.csv`
+- Transaction exports and valuation exports can be mixed in one run directory.
+- File type is inferred by filename and CSV structure.
+
+Holdings snapshot input:
+
+- Path pattern: `data/raw/<YYYY-MM-DD>/holdings_snapshot*.csv`
+- Required columns: `account_name`, `as_of_date`, `asset_name`, `market_value_gbp`
+- Optional columns: `account_id`, `isin`, `sedol`, `units`, `currency`, `source_file`
+
+Staging tables:
+
+- `stg_transactions`: classified transaction events and signed amounts.
+- `stg_account_value_daily`: daily account close values.
+- `stg_account_flow_daily`: aggregated external/internal daily flows.
+- `stg_asset_checkpoint`: per-account asset valuation checkpoints.
+- `stg_account_cost_daily`: daily fee, tax, and interest components.
+- `stg_account_cash_daily`: daily cash balances, observed or proxied.
+
+Marts:
+
+- `mart_account_daily`: account-level corrected P/L and return.
+- `mart_portfolio_daily`: portfolio-level corrected P/L and return.
+- `mart_asset_daily`: reconstructed daily asset values, returns, and weights.
+- `mart_attribution_daily`: allocation, selection, interaction, and residual effects.
+- `mart_concentration_daily`: concentration metrics and breach flags.
+- `mart_cost_drag_account_daily`: account-level fee, tax, and idle-cash drag.
+- `mart_cost_drag_portfolio_daily`: portfolio-level fee, tax, and idle-cash drag.
+
+## Metric Definitions
+
+- Daily corrected P/L: `daily_pnl = V_t - V_(t-1) - external_flow_t`
+- Daily corrected return: `daily_return = daily_pnl / (V_(t-1) + 0.5 * external_flow_t)`
+- Cumulative return: chain-linked `product(1 + daily_return) - 1`
+- Net deposited cash: cumulative external inflows minus external outflows
+
+The daily return uses a Modified Dietz-style daily approximation.
+
+## Configuration
+
+- `config/accounts.yml`: account IDs, display names, account types, wrappers, and name matching.
+- `config/txn_type_map.yml`: transaction classification and flow classes.
+- `config/asset_ticker_overrides.yml`: optional manual ticker mappings.
+- `config/benchmark.yml`: benchmark ticker/provider for dashboard context.
+- `config/attribution_policy.yml`: optional account policy weights and coverage threshold.
+- `config/risk_limits.yml`: concentration warning and critical thresholds.
+- `config/cost_drag.yml`: idle-cash benchmark assumptions.
+
+## Optional PowerShell Wrappers
+
+The project still includes PowerShell wrappers for convenience, but they are not required when using `uv`.
+
+- `scripts/run_demo.ps1`: demo import, mart build, and quality report.
+- `scripts/run_all.ps1`: CSV import, mart build, and quality report.
+- `scripts/fetch_hl_exports.ps1`: automated CSV fetch plus optional pipeline run.
+- `scripts/fetch_investment_reports.ps1`: PDF fetch, parse, and report mart build.
+- `scripts/fetch_prices.ps1`: ticker resolution and yfinance price fetch.
+
+Example:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_demo.ps1
+```
 
 ## Troubleshooting
 
-- Missing `mart_asset_daily` rows on CSV runs:
-  - Ensure `holdings_snapshot*.csv` files exist under `data/raw/<RunDate>/`.
-- Missing benchmark context:
-  - Set `config/benchmark.yml` and run `scripts/fetch_prices.ps1` (or `src.prices.fetch_yfinance_prices`).
-- Cost drag shows proxy cash quality:
-  - Report-mode cash is estimated from parsed capital/income account balances when explicit valuation cash is unavailable.
+- Missing `mart_asset_daily` rows on CSV runs: include `holdings_snapshot*.csv` files under `data/raw/<RunDate>/`.
+- Missing benchmark context: set `config/benchmark.yml`, resolve/fetch prices, then rebuild report marts.
+- Cost drag shows proxy cash quality: report-mode cash is estimated from parsed capital/income account balances when explicit valuation cash is unavailable.
+- No Investment Report PDFs downloaded: confirm the browser reached the authenticated account area and that HL exposes report links for the account history page.
+- Empty dashboard: confirm `HL_DB_PATH` points to an existing DuckDB file and that marts were built.
 
 ## Extending Analyses
 
-Add new analysis with minimal coupling:
+To add a new analysis:
 
-1. Add/adjust classification rules in `config/txn_type_map.yml`.
-2. Add new metric logic in `src/metrics/`.
+1. Add or adjust classification rules in `config/txn_type_map.yml`.
+2. Add metric logic in `src/metrics/`.
 3. Materialize new tables in `src/marts/` or `sql/`.
-4. Add new dashboard page in `src/presentation/pages/`.
-5. Add regression tests in `tests/`.
+4. Add a dashboard page in `src/presentation/pages/`.
+5. Add focused regression tests in `tests/`.
