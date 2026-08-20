@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 
 from src.common.db import connect_db, ensure_schema
@@ -92,3 +94,70 @@ def test_quality_report_detects_issues(tmp_path) -> None:
     assert len(report["checks"]["duplicate_stg_transactions"]) == 1
     assert len(report["checks"]["unmapped_transaction_types"]) == 1
     assert len(report["checks"]["valuation_gaps_gt_7_days"]) == 1
+    assert report["checks"]["duplicate_stg_transactions"][0]["event_date"] == "2026-01-01"
+    json.dumps(report)
+
+
+def test_quality_report_errors_on_asset_checkpoint_after_latest_account_value(tmp_path) -> None:
+    db_path = tmp_path / "quality_missing_account_value.duckdb"
+    conn = connect_db(db_path)
+    ensure_schema(conn)
+
+    run_id = "REPORTS_2026-08-19"
+    conn.execute(
+        """
+        insert into stg_account_value_daily (account_id, d, close_value_gbp, source_run_id)
+        values ('LISA', '2026-01-31', 55622.0, ?)
+        """,
+        [run_id],
+    )
+    conn.execute(
+        """
+        insert into stg_asset_checkpoint
+          (account_id, asset_id, asset_name_canonical, d, value_gbp, source_run_id)
+        values
+          ('LISA', 'ASSET_A', 'blackrock frontiers investment tst ord 1p', '2026-04-30', 1405.0, ?)
+        """,
+        [run_id],
+    )
+
+    report = build_quality_report(conn=conn, run_id=run_id)
+
+    assert report["status"] == "error"
+    assert report["critical_issue_count"] == 1
+    findings = report["checks"]["asset_checkpoints_after_latest_account_value"]
+    assert findings[0]["account_id"] == "LISA"
+    assert findings[0]["latest_account_value_date"] == "2026-01-31"
+    json.dumps(report)
+
+
+def test_quality_report_errors_on_suspicious_asset_heading_name(tmp_path) -> None:
+    db_path = tmp_path / "quality_suspicious_asset.duckdb"
+    conn = connect_db(db_path)
+    ensure_schema(conn)
+
+    run_id = "REPORTS_2026-08-19"
+    conn.execute(
+        """
+        insert into stg_account_value_daily (account_id, d, close_value_gbp, source_run_id)
+        values ('LISA', '2026-01-31', 55622.0, ?)
+        """,
+        [run_id],
+    )
+    conn.execute(
+        """
+        insert into stg_asset_checkpoint
+          (account_id, asset_id, asset_name_canonical, d, value_gbp, source_run_id)
+        values
+          ('LISA', 'ASSET_BAD', 'lifetime isa 31 january 2026', '2026-01-31', 2170255.0, ?)
+        """,
+        [run_id],
+    )
+
+    report = build_quality_report(conn=conn, run_id=run_id)
+
+    assert report["status"] == "error"
+    assert report["critical_issue_count"] == 1
+    findings = report["checks"]["suspicious_asset_heading_names"]
+    assert findings[0]["asset_name_canonical"] == "lifetime isa 31 january 2026"
+    json.dumps(report)

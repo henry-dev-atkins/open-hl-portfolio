@@ -10,7 +10,6 @@ from pypdf import PdfReader
 
 from src.common.paths import PROJECT_ROOT
 
-
 # Some HL PDFs extract the GBP symbol as U+00A3, U+0141, or prefixed variants.
 CURRENCY_TOKEN_RE = re.compile(r"(\u00a3|\u0141|\u00c2\u00a3|\u00c2\u0141)")
 MONEY_RE = re.compile(r"(?:\u00a3|\u0141|\u00c2\u00a3|\u00c2\u0141)\s*([0-9][0-9,]*\.?[0-9]{0,2})")
@@ -20,7 +19,7 @@ OVERVIEW_ROW_RE = re.compile(
     r"^(?P<account>[A-Za-z&' \-]+?)\s+"
     r"(?P<current>[0-9][0-9,]*)\s+"
     r"(?P<previous>[0-9][0-9,]*)\s+"
-    r"(?P<change>[0-9][0-9,]*)$"
+    r"(?P<change>\(?[0-9][0-9,]*\)?)$"
 )
 TXN_DATE_RE = re.compile(r"(?P<date>\d{2}/\d{2}/\d{4})")
 ASSET_VALUE_LEAD_RE = re.compile(r"^\s*(?P<value>[0-9][0-9,]*)\b")
@@ -31,6 +30,11 @@ ACCOUNT_HEADER_RE = re.compile(
 )
 DETAILED_VALUATION_HEADER_RE = re.compile(
     r"^\-+\s*(?P<account>[A-Za-z&' \-]+?)\s*DETAILED\s+VALUATION",
+    re.IGNORECASE,
+)
+ACCOUNT_DATE_HEADING_RE = re.compile(
+    r"^(?:STOCKS\s*&\s*SHARES\s+ISA|LIFETIME\s+ISA|SIPP|LOYALTY\s+BONUS\s+ACCOUNT|FUND\s*&\s*SHARE\s+ACCOUNT)\s+"
+    r"\d{1,2}\s+[A-Z]+\s+\d{4}$",
     re.IGNORECASE,
 )
 TXN_LINE_RE_LEAD_AMOUNT = re.compile(
@@ -195,7 +199,7 @@ def _extract_overview_rows(text: str) -> tuple[str | None, str | None, list[dict
                 "account_name": account,
                 "value_current": float(m.group("current").replace(",", "")),
                 "value_previous": float(m.group("previous").replace(",", "")),
-                "change_value": float(m.group("change").replace(",", "")),
+                "change_value": _parse_signed_amount(m.group("change")),
             }
         )
 
@@ -262,6 +266,8 @@ def _looks_like_asset_name_line(line: str) -> bool:
         return False
     if line[0].isdigit():
         return False
+    if ACCOUNT_DATE_HEADING_RE.match(line):
+        return False
     upper = line.upper()
     if any(
         token in upper
@@ -316,6 +322,9 @@ def _extract_asset_value_rows(text: str, report_date: str | None) -> list[dict[s
 
         value_match = ASSET_VALUE_LEAD_RE.match(line)
         if not value_match:
+            i += 1
+            continue
+        if any(token in upper_line for token in ("SUBTOTAL", "STOCK TOTAL", "TOTAL")):
             i += 1
             continue
 
@@ -394,7 +403,7 @@ def _extract_capital_transactions(text: str) -> list[dict[str, object]]:
                 continue
             amount = _parse_signed_amount(match.group("amount"))
             balance = _parse_signed_amount(match.group("balance"))
-        except Exception:  # noqa: BLE001
+        except (TypeError, ValueError):
             continue
 
         description = _normalize_spaces(match.group("description"))
